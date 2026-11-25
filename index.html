@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Control LED Bluefy (RGB + Brillo)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #12121a;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h2 { margin-bottom: 5px; font-size: 20px; }
+    #estado {
+      color: #facc15;
+      font-size: 13px;
+      margin-bottom: 20px;
+      word-break: break-word;
+      min-height: 18px;
+    }
+    .panel {
+      width: 100%;
+      max-width: 380px;
+      background: #1c1c28;
+      padding: 20px;
+      border-radius: 16px;
+      box-sizing: border-box;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+    }
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 15px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    button:active { transform: scale(0.97); }
+
+    /* Botón central Conectar / Desconectar */
+    .btn-conexion {
+      width: 100%;
+      margin-bottom: 14px;
+      font-size: 16px;
+    }
+    .conectar { background: #3b82f6; color: white; }
+    .desconectar { background: #64748b; color: white; }
+
+    /* Fila Encender / Apagar */
+    .power-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+    .btn-on { background: #22c55e; color: #052e16; flex: 1; }
+    .btn-off { background: #ef4444; color: white; flex: 1; }
+
+    /* Vista previa de color */
+    #preview {
+      width: 100%;
+      height: 36px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      background: rgb(0, 136, 255);
+      border: 2px solid #2e2e3e;
+      box-sizing: border-box;
+    }
+
+    /* Sliders */
+    .slider-group {
+      margin-bottom: 16px;
+      text-align: left;
+    }
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 10px;
+      border-radius: 5px;
+      background: #2e2e3e;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #ffffff;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    }
+    #sliderR { background: linear-gradient(to right, #1f1f2e, #ff3b30); }
+    #sliderG { background: linear-gradient(to right, #1f1f2e, #34c759); }
+    #sliderB { background: linear-gradient(to right, #1f1f2e, #007aff); }
+    #sliderBrillo { background: linear-gradient(to right, #1f1f2e, #facc15); }
+  </style>
+</head>
+<body>
+
+  <h2>💡 Control LEDs Paul</h2>
+  <div id="estado">Listo para conectar</div>
+
+  <div class="panel">
+    <!-- Botón central de Conectar / Desconectar -->
+    <button id="btnConexion" class="btn-conexion conectar" onclick="toggleConexion()">
+      🔗 Conectar dispositivo
+    </button>
+
+    <!-- Botones Encender y Apagar -->
+    <div class="power-row">
+      <button class="btn-on" onclick="encender(true)">ENCENDER</button>
+      <button class="btn-off" onclick="encender(false)">APAGAR</button>
+    </div>
+
+    <!-- Muestra visual del color resultante -->
+    <div id="preview"></div>
+
+    <!-- Slider Red -->
+    <div class="slider-group">
+      <div class="slider-header">
+        <span style="color:#ff6b6b;">Red (Rojo)</span>
+        <span id="valR">0</span>
+      </div>
+      <input type="range" id="sliderR" min="0" max="255" value="0" oninput="actualizarColor()" />
+    </div>
+
+    <!-- Slider Green -->
+    <div class="slider-group">
+      <div class="slider-header">
+        <span style="color:#51cf66;">Green (Verde)</span>
+        <span id="valG">136</span>
+      </div>
+      <input type="range" id="sliderG" min="0" max="255" value="136" oninput="actualizarColor()" />
+    </div>
+
+    <!-- Slider Blue -->
+    <div class="slider-group">
+      <div class="slider-header">
+        <span style="color:#339af0;">Blue (Azul)</span>
+        <span id="valB">255</span>
+      </div>
+      <input type="range" id="sliderB" min="0" max="255" value="255" oninput="actualizarColor()" />
+    </div>
+
+    <!-- Slider Brillo -->
+    <div class="slider-group" style="margin-bottom: 0;">
+      <div class="slider-header">
+        <span style="color:#facc15;">☀️ Brillo</span>
+        <span id="valBrillo">100%</span>
+      </div>
+      <input type="range" id="sliderBrillo" min="0" max="100" value="100" oninput="actualizarColor()" />
+    </div>
+  </div>
+
+  <script>
+    let bleDevice = null;
+    let charWrite = null;
+    let seq = 1;
+    let ultimoEnvio = 0;
+
+    const SERVICE_UUID = '0000ffff-0000-1000-8000-00805f9b34fb';
+    const CHAR_UUID = '0000ff01-0000-1000-8000-00805f9b34fb';
+    const esperar = ms => new Promise(res => setTimeout(res, ms));
+
+    async function toggleConexion() {
+      if (bleDevice && bleDevice.gatt.connected) {
+        desconectar();
+      } else {
+        await conectar();
+      }
+    }
+
+    async function conectar() {
+      try {
+        actualizarEstado("Buscando dispositivo LEDnet...", "#facc15");
+
+        bleDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'LEDnet' }],
+          optionalServices: [SERVICE_UUID]
+        });
+
+        bleDevice.addEventListener('gattserverdisconnected', alDesconectar);
+
+        actualizarEstado("Conectando a " + (bleDevice.name || "LEDnetWF") + "...", "#facc15");
+        const server = await bleDevice.gatt.connect();
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        charWrite = await service.getCharacteristic(CHAR_UUID);
+
+        // Handshake obligatorio Zengge
+        await enviarTrama([0x81, 0x8a, 0x8b], 0x0a);
+        await esperar(300);
+
+        actualizarEstado("✅ Conectado a " + (bleDevice.name || "LEDnetWF02"), "#4ade80");
+        actualizarBotonConexion(true);
+      } catch (e) {
+        actualizarEstado("❌ Error: " + e.message, "#f87171");
+        actualizarBotonConexion(false);
+      }
+    }
+
+    function desconectar() {
+      if (bleDevice && bleDevice.gatt.connected) {
+        bleDevice.gatt.disconnect();
+      }
+      alDesconectar();
+    }
+
+    function alDesconectar() {
+      charWrite = null;
+      actualizarEstado("🔌 Dispositivo desconectado", "#9ca3af");
+      actualizarBotonConexion(false);
+    }
+
+    function actualizarBotonConexion(conectado) {
+      const btn = document.getElementById('btnConexion');
+      if (conectado) {
+        btn.innerText = "🔌 Desconectar";
+        btn.classList.remove("conectar");
+        btn.classList.add("desconectar");
+      } else {
+        btn.innerText = "🔗 Conectar dispositivo";
+        btn.classList.remove("desconectar");
+        btn.classList.add("conectar");
+      }
+    }
+
+    function actualizarEstado(texto, color) {
+      const el = document.getElementById('estado');
+      el.innerText = texto;
+      el.style.color = color;
+    }
+
+    async function enviarTrama(payload, tipo = 0x0b) {
+      if (!charWrite) {
+        actualizarEstado("⚠️ Pulsa Conectar primero", "#facc15");
+        return;
+      }
+      const cs = payload.reduce((a, b) => a + b, 0) & 0xff;
+      const datos = [...payload, cs];
+      const len1 = datos.length;
+      const len2 = len1 + 1;
+      const cabecera = [0x00, seq, 0x80, 0x00, 0x00, len1, len2, tipo];
+      seq = (seq + 1) & 0xff;
+      const buffer = new Uint8Array([...cabecera, ...datos]);
+
+      try {
+        if (charWrite.writeValueWithoutResponse) {
+          await charWrite.writeValueWithoutResponse(buffer);
+        } else if (charWrite.writeValue) {
+          await charWrite.writeValue(buffer);
+        } else {
+          await charWrite.writeValueWithResponse(buffer);
+        }
+      } catch (err) {
+        actualizarEstado("Error envío: " + err.message, "#f87171");
+      }
+    }
+
+    function encender(on) {
+      const estado = on ? 0x23 : 0x24;
+      enviarTrama([0x3b, estado, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00], 0x0b);
+    }
+
+    function actualizarColor() {
+      const r = parseInt(document.getElementById('sliderR').value, 10);
+      const g = parseInt(document.getElementById('sliderG').value, 10);
+      const b = parseInt(document.getElementById('sliderB').value, 10);
+      const brillo = parseInt(document.getElementById('sliderBrillo').value, 10);
+
+      // Actualizar etiquetas numéricas
+      document.getElementById('valR').innerText = r;
+      document.getElementById('valG').innerText = g;
+      document.getElementById('valB').innerText = b;
+      document.getElementById('valBrillo').innerText = brillo + "%";
+
+      // Aplicar escala de brillo a los valores RGB (0.0 a 1.0)
+      const factor = brillo / 100;
+      const rFinal = Math.round(g * factor); //cambia a GRB
+      const gFinal = Math.round(r * factor);
+      const bFinal = Math.round(b * factor);
+
+      // Actualizar barra de vista previa
+      document.getElementById('preview').style.background = `rgb(${gFinal}, ${rFinal}, ${bFinal})`; //aqui tambien GRB
+
+      // Evitar saturar el Bluetooth de Bluefy al deslizar rápido (máx. 1 trama cada 50ms)
+      const ahora = Date.now();
+      if (ahora - ultimoEnvio < 50) return;
+      ultimoEnvio = ahora;
+
+      // Enviar en orden GRB [0x41, modo(1), g, r, b, ...]
+      enviarTrama([0x41, 0x01, gFinal, rFinal, bFinal, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0xf0], 0x0b);
+    }
+  </script>
+</body>
+</html>
