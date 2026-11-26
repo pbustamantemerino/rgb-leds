@@ -112,7 +112,7 @@
 </head>
 <body>
 
-  <h2>💡 Control LEDs Paul</h2>
+  <h2>💡 Control LEDs Paul'26</h2>
   <div id="estado">Listo para conectar</div>
 
   <div class="panel">
@@ -187,10 +187,10 @@
 
     async function conectar() {
       try {
-        actualizarEstado("Buscando dispositivo LEDnet...", "#facc15");
+        actualizarEstado("Buscando LEDnet o Control...", "#facc15");
 
         bleDevice = await navigator.bluetooth.requestDevice({
-          filters: [{ namePrefix: 'LEDnet' }],
+          filters: [{ namePrefix: 'LEDnet' },{ namePrefix: 'Control' }],
           optionalServices: [SERVICE_UUID]
         });
 
